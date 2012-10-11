@@ -10,3 +10,484 @@
 *.lai
 *.la
 *.a
+#include<fstream>
+#include<iterator>
+#include<ctime>
+#include <cmath>
+#include<algorithm>
+using namespace std;
+
+
+int rand(ifstream&);
+/* returns probability */
+double getProb(ifstream&);
+/* opens file for reading */
+void openResourceFile(ifstream&, const string&);
+
+
+class Process
+{
+  friend ostream& operator<<(ostream& , Process );
+	float priority;
+	int IOdelay, ID, arrivalTime, totalCPU, avgBurst, lastBurst;
+	
+public:
+	Process(int ID = 0, int arrivalTime = 0, int totalCPU = 0, int avgBurst = 0) : ID(ID), arrivalTime(arrivalTime), totalCPU(totalCPU), avgBurst(avgBurst), lastBurst(0), priority(0), IOdelay(0)
+	  {}
+
+	  void setIOdelay(int delay)
+	  {
+		IOdelay = delay;
+	  }
+	  int getIOdelay() const
+	  {	
+		  return IOdelay;
+	  }
+
+	  // getters and setter
+	  int getID() const
+	  {
+		  return ID;
+	  }
+	  int getArrivalTime() const 
+	  {
+		  return arrivalTime; 
+	  }
+	  int getTotalCPU() const 
+	  {
+		  return totalCPU; 
+	  }
+	  int getAvgBurst() const 
+	  { 
+		  return avgBurst; 
+	  }
+	  int getlastBurst() const 
+	  {
+		  return lastBurst;
+	  }
+	  float getPriority() const 
+	  {
+		  return priority; 
+	  }
+	  void setTotCPU(int cpu) 
+	  {
+		  totalCPU = cpu; 
+	  }
+	  void setlastBurst(int lb)
+	  {
+		  lastBurst = lb;
+	  }
+	  void setPriority(float p) 
+	  {
+		  priority = p;
+	  }
+	  bool burstEnded(int elapsed, ifstream& input)
+	  {
+		  // its checking the burst to the avgerage burst to check when the processes burt is over
+		  if (this == 0)
+			  return true;
+		  if (elapsed < avgBurst-1)
+			  return false;
+		  if (elapsed == avgBurst-1)
+		  {
+			  if (getProb(input) <= (double)1/3)
+				  return true;
+			  return false;
+		  }
+		  if (elapsed == avgBurst)
+		  {
+			  if (getProb(input) <= (double)1/2)
+				  return true;
+			  return false;
+		  }
+
+		  if (elapsed > avgBurst)
+			  return true;
+	  }
+
+	
+	  int operator--(int)
+	  {
+		  int temp = totalCPU;
+		  --totalCPU;
+		  return temp;
+	  }
+	  int operator--() { --totalCPU; return totalCPU; }
+	  bool operator==(int val) { return totalCPU == val; }
+}; 
+
+struct Schedule
+{
+	string processFile;
+	int IOdelay;
+	int contextSwitchDelay;
+	float agingRatio;
+	bool debug;
+}; 
+
+
+ostream& operator<<(ostream& screen, Process& process)
+{
+	screen << process.getTotalCPU();
+	return screen;
+}
+
+bool operator< ( const Process& lhs, const Process& rhs) 
+{
+	// When the Priorities happens to be the same then the processes get FCFS and when they come at similar time then the FCFS won't matter.
+	if (lhs.getPriority() == rhs.getPriority())
+		return lhs.getArrivalTime() > rhs.getArrivalTime();
+	else 
+		return lhs.getPriority() > rhs.getPriority();
+}
+
+
+void display(const Schedule& sch);
+// reads in file	
+void accessProcesses(ifstream&, queue<Process>&, Schedule&);
+// FCFS Algorithm
+void FCFS(queue<Process>&, const Schedule&);
+// SRTN Algorithm
+void SRTN(queue<Process>&, const Schedule&);
+
+int main()
+{
+	ifstream readSFile;
+	Schedule sch;
+
+	// the processes is read in by queue 
+	queue<Process> arrivalQueue;
+	openResourceFile(readSFile, "scheduling.txt");
+	accessProcesses(readSFile, arrivalQueue, sch);
+	display(sch);
+	FCFS(arrivalQueue, sch);  
+	readSFile.close();
+	SRTN(arrivalQueue, sch);
+}
+
+int randFunc(ifstream& input)
+{
+	int temp;
+	// if it were to come end of the file it would start over
+	if (input.eof())
+	{
+		input.close();
+		openResourceFile(input, "radom_numbers.txt");
+	}
+
+	input >> temp;
+	return temp;
+} 
+
+double getProb(ifstream& input)
+{
+	int random = randFunc(input);
+	double result = (double)random/LONG_MAX;	
+	return result;
+}
+
+void openResourceFile(ifstream& input, const string& fN)
+{	
+	input.open(fN.c_str());
+	if (input.fail())
+	{
+		cout << "OOPS the file " << fN << " cannot be found!!!";
+		exit(1);
+	}
+}
+
+void accessProcesses(ifstream& input, queue<Process>& queue, Schedule& sch)
+{
+	string temp;
+	
+	// reads in and process of analyzing the file contexts
+	while (input >> temp)
+	{
+		
+		if (temp.at(0) == 'P' || temp.at(0) == 'p')
+		{
+			if (temp.substr(1, 11) == "rocessFile=" )
+				sch.processFile = temp.substr(12);
+		}
+
+		
+		else if(temp.at(0) == 'I' || temp.at(0) == 'i')
+		{
+			if (temp.substr(1, 7) == "Odelay=" ){
+				sch.IOdelay = stoi(temp.substr(8));}
+		}
+
+		
+		else if(temp.at(0) == 'C' || temp.at(0) == 'c')
+		{
+			if (temp.substr(1, 18) == "ontextSwitchDelay=" )
+				sch.contextSwitchDelay = atoi(temp.substr(19).c_str());
+		}
+
+		
+		else if(temp.at(0) == 'A' || temp.at(0) == 'a')
+		{
+			if (temp.substr(1, 10) == "gingRatio=" )
+				sch.agingRatio = stof(temp.substr(11));
+		}
+
+		
+		else if(temp.at(0) == 'D' || temp.at(0) == 'd')
+		{
+			if (temp.substr(1, 5) == "ebug=" )
+				sch.debug = (temp.substr(6) == "true");
+		}
+
+		temp.clear();
+	}
+
+	input.close();
+
+	// open the specified processes file
+	ifstream readProcessFile;
+	openResourceFile(readProcessFile, sch.processFile);
+
+	int id, time, cpu, avg;
+	while (readProcessFile >> id)
+	{
+		readProcessFile >> time >> cpu >> avg;
+		Process temp(id, time, cpu, avg);
+		queue.push(temp);
+	}
+	// closes file
+	readProcessFile.close();
+} 
+
+void FCFS(queue<Process>& arrivalQueue, const Schedule& sch)
+{		
+	int time(0), burst(0), contextSwitch(0);
+	bool isContextSwitch(false);
+	Process run = NULL;	
+	bool itsRunning = false;
+
+	ifstream readRandFile;
+	queue<Process> readyQueue, waitingQueue; 		
+	openResourceFile(readRandFile, "random_numbers.txt");
+
+	while ( !readyQueue.empty() || !waitingQueue.empty() || !arrivalQueue.empty() || itsRunning)
+	{	
+		if (isContextSwitch)
+		{
+			--contextSwitch;
+			isContextSwitch = ((contextSwitch <= 0) ? false: true);
+		}	
+
+		//  when its ready move from arrival to readyqueue
+		if ( !arrivalQueue.empty() )
+		{
+			Process process = arrivalQueue.front();
+			// is it time yet
+			if (process.getArrivalTime() <= time)
+			{				
+				readyQueue.push(process);
+				cout << "Time: " << time << ": Moving process "<< process.getID() << " from arrivalQueue to readyQueue" << endl;
+				arrivalQueue.pop();
+			}
+		}	
+
+		// it will move from waitingQueue to readyQeue
+		if ( !waitingQueue.empty() )
+		{
+			// IOdelay process
+			int delay = waitingQueue.front().getIOdelay();
+			if ( delay >= 0)
+				waitingQueue.front().setIOdelay( delay - 1 );
+
+			if (waitingQueue.front().getArrivalTime() <= time && waitingQueue.front().getIOdelay() == 0)
+			{
+				readyQueue.push(waitingQueue.front());
+				cout << "Time: " << time << ": Moving process "<< waitingQueue.front().getID() << " from waitingQueue to readyQueue" << endl;
+				waitingQueue.pop();
+			}
+		} 
+
+		if ( !readyQueue.empty() && !isContextSwitch && !itsRunning)
+		{
+			run = readyQueue.front();							
+			itsRunning = true;
+			readyQueue.pop();				
+			cout << "Time: " << time << ": Moving " << run.getID() << " from readyQueue to running" << endl;
+		} 
+
+		if (itsRunning)
+		{
+			// when the process has finishing runing
+			if (run == 0)
+			{
+				isContextSwitch = true;
+				contextSwitch = sch.contextSwitchDelay;
+				cout << "Time: " << time << ": Process "<< run.getID() << " finished.\n";
+				itsRunning = false;				
+				burst = 0;
+				++time;
+				continue;
+			}		
+
+			// when it runs out of I/O interrupts or Burst do this 
+			if (run.burstEnded(burst, readRandFile)) 
+			{
+				cout << "Time: " << time << ": Process " << run.getID() << " ending burst (" << burst << ") "
+   					 << " | Remaining time = " << run.getTotalCPU() << endl;
+
+				// slows down the process for IOdelay 
+				run.setIOdelay(sch.IOdelay);
+				waitingQueue.push(run);
+				itsRunning = false;
+				isContextSwitch = true;
+				contextSwitch = sch.contextSwitchDelay;
+				burst = 0;
+			}	
+			else
+			{
+				--run;
+				++burst;
+			}
+		}	
+
+		++time;		
+	}	
+
+	readRandFile.close();
+}  
+
+void SRTN(queue<Process>& itsHere, const Schedule& sch)
+{
+	queue<Process> readyQueue, waitQueue;
+	Process run;
+	bool itsRunning = false;
+	float prediction, history(0.0);
+	int IO(sch.IOdelay), time(0), burst(0), CSdelay(0);
+
+	// While we still have processes
+	while(!readyQueue.empty() || !waitQueue.empty() ||!itsHere.empty() || itsRunning)
+	{
+		if(!itsHere.empty()) // if any process will arrive
+		{
+			if (itsHere.front().getArrivalTime() <= time) // if its time to arrive
+			{
+				prediction = (sch.agingRatio * itsHere.front().getlastBurst()) 
+					+ ((1 - sch.agingRatio) * history);
+				// it will move to waitqueue to readyqueue
+				itsHere.front().setPriority(prediction);
+				readyQueue.push(itsHere.front());
+				cout << "Time : " << time << ": Moving process "<< itsHere.front().getID() 
+					<< " from arrival to ready.\tPrediction: " << prediction << endl;
+				itsHere.pop();
+			}
+		}
+
+		if (CSdelay == 0)
+		{
+			if(!itsRunning)
+			{
+				if (!readyQueue.empty())
+				{
+					run = readyQueue.front();
+					itsRunning = true;
+					readyQueue.pop();
+					cout << "Time : " << time << ": Moving process "<< run.getID() << 
+						" from ready to run.\tRemaining Time: " << run.getTotalCPU() << endl;
+				}
+			}
+			else//when the processed runs, it will decrement it's burst
+			{
+				
+				if (!readyQueue.empty())
+				{
+					if (run.getPriority() > readyQueue.front().getPriority())
+					{
+						CSdelay = sch.contextSwitchDelay;
+						readyQueue.push(run);
+						itsRunning = false;						
+						cout << "Time : " << time << ": Moving process "<< run.getID() << 
+							" from run to ready.\tRemaining Time: " << run.getTotalCPU() << endl;
+					}
+				}
+				
+				else if(burst==run.getAvgBurst())
+ 					// If burst were to end
+				{
+					CSdelay = sch.contextSwitchDelay;
+					waitQueue.push(run);
+					itsRunning = false;
+					cout << "Time : " << time << ": Process "<< run.getID() << 
+						" ending burst (" << run.getlastBurst() << ").\t\tRemaining Time: " 
+						<< run.getTotalCPU() << endl;
+				}
+				else if (run.getTotalCPU() == 0)// If process were to be finished
+				{
+					CSdelay = sch.contextSwitchDelay;
+					itsRunning = false;
+					cout << "Time : " << time << ": Process "<< run.getID() << 
+						" finished.\n";
+				}
+				else// it decrement the process burst
+				{
+					run.setTotCPU(run.getTotalCPU()-1);
+					burst++;
+				}
+			}
+
+			// IO on waiting processes
+			if(!waitQueue.empty())
+			{
+				if (IO > 0)
+					--IO;
+				else// Check for csd
+				{
+					prediction = (sch.agingRatio * waitQueue.front().getlastBurst()) + ((1 - sch.agingRatio) * history);
+					IO = sch.IOdelay;
+					readyQueue.push(waitQueue.front());
+					cout << "Time : " << time << ": Moving process "<< waitQueue.front().getID() 
+						<< " from waiting to ready\tPrediction: " << prediction << endl;
+					waitQueue.pop();
+				}
+			}
+
+			// After process is done with one iteration
+			if(CSdelay > 0)
+				--CSdelay;//Process Context switch delay, if any
+			history = prediction; // it makes current prediction history
+			run.setlastBurst(run.getlastBurst()+1);//  it counts to figure out the last burst
+			run.setPriority(run.getPriority()-1); // takes care of aging
+			++time;
+		}
+	}
+}
+//shows student info
+void display(const Schedule& sch)
+{
+	cout << " Process Scheduling\n"
+		<<" Students: Ohida Sultana\n"
+		<<" ID:0380797\n"
+		<<" Course: CS3224\n"
+		<<" Instructor: Evan Gallagher\n"
+		<<" Date: March 27, 2012\n"
+		<<" email: osulta01@students.poly.edu\n"
+		<<"==============================================================\n\n"
+		<<"ProcessFile = " << sch.processFile << endl
+		<<"IOdelay = " << sch.IOdelay << endl
+		<<"ContextSwitchDelay = " << sch.contextSwitchDelay << endl
+		<<"AgingRatio = " << sch.agingRatio << endl
+		<<"Debug = " << sch.debug << endl << endl;
+
+	// This shows PID;Arrival;Total time; and Avg Burst
+	ifstream read;
+	openResourceFile(read, sch.processFile);
+
+	int id, time, cpu, avg;
+	while (read >> id >> time >> cpu >> avg)
+	{
+		cout << "PID: " << id << "\tArrival: " << time 
+			<< "\tTotal time: " << cpu << "\tAvg Burst: "<< avg << endl;
+	}
+
+	read.close();
+
+	cout << endl;
+}	
